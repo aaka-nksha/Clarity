@@ -1,5 +1,3 @@
 flask
-kafka-python
-pyspark
-pandas
 gunicorn
+
