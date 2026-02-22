@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clarity | What should I do next?</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <div class="background-blur"></div>
+
+    <div class="container">
+        <header>
+            <h1>Clarity</h1>
+            <p class="subtitle">A neural-aesthetic planner for focused high-achievers.</p>
+        </header>
+
+        <main class="glass-card">
+            <div id="plannerView" class="calendar-container" style="display: block;">
+                <div class="calendar-header">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <select id="monthSelect"
+                            style="width: auto; padding: 6px 12px; border-radius: 10px; font-size: 0.9rem; background: rgba(255,255,255,0.05);"></select>
+                        <select id="yearSelect"
+                            style="width: auto; padding: 6px 12px; border-radius: 10px; font-size: 0.9rem; background: rgba(255,255,255,0.05);"></select>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="prevMonth()"
+                            style="background: transparent; border: none; color: white; cursor: pointer;"><i
+                                data-lucide="chevron-left"></i></button>
+                        <button onclick="nextMonth()"
+                            style="background: transparent; border: none; color: white; cursor: pointer;"><i
+                                data-lucide="chevron-right"></i></button>
+                    </div>
+                </div>
+                <div class="calendar-grid" id="calendarGrid">
+                    <!-- Calendar days will appear here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Task Modal -->
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal()"></div>
+    <div class="task-modal" id="taskModal">
+        <label id="modalDateLabel">Oct 24, 2023</label>
+
+        <div class="view-toggle" style="margin-top: 1rem;">
+            <button class="toggle-btn active" id="modalAddTab" onclick="switchModalTab('add')">Add</button>
+            <button class="toggle-btn" id="modalAnalyzeTab" onclick="switchModalTab('analyze')">Analyze</button>
+        </div>
+
+        <div id="modalAddView">
+            <div class="form-group" style="margin-top: 1.5rem;">
+                <input type="text" id="taskInput" placeholder="What's the plan?">
+                <button class="primary-btn" onclick="scheduleTask()" style="margin-top: 1rem;">Add to Day</button>
+            </div>
+        </div>
+
+        <div id="modalAnalyzeView" style="display: none;">
+            <div class="form-group" style="margin-top: 1.5rem;">
+                <label>Available Time: <span class="slider-value" id="modalTimeValue">30</span> min</label>
+                <input type="range" id="modalTimeSlider" min="5" max="180" value="30" step="5">
+                <button class="primary-btn" id="modalAnalyzeBtn" onclick="analyzeDayTasks()"
+                    style="margin-top: 1rem;">Get Next Step</button>
+
+                <div class="result-area" id="modalResultArea" style="margin-top: 1.5rem;">
+                    <div class="next-action-card">
+                        <h3 id="modalResAction" class="action-title" style="font-size: 1rem;"></h3>
+                        <p id="modalResReason" class="reason" style="font-size: 0.8rem;"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="activeTasksSection" style="margin-top: 1.5rem;">
+            <label style="font-size: 0.7rem; color: var(--accent-color); margin-bottom: 0.5rem;">Active Tasks</label>
+            <div id="activeTaskList" style="max-height: 150px; overflow-y: auto;">
+                <!-- Active tasks here -->
+            </div>
+        </div>
+
+        <div id="finishedTasksSection" style="margin-top: 1.5rem; display: none;">
+            <label style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Finished on this
+                day</label>
+            <div id="finishedTaskList" style="max-height: 150px; overflow-y: auto;">
+                <!-- Finished tasks here -->
+            </div>
+        </div>
+
+        <button onclick="closeModal()"
+            style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-secondary); width: 100%; padding: 0.75rem; border-radius: 12px; cursor: pointer; font-size: 0.9rem; transition: all 0.3s ease;">
+            Back to Calendar
+        </button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+
+            let scheduledTasks = {};
+            let currentDate = new Date();
+            let selectedDate = null;
+
+            // Cache DOM elements
+            const elements = {
+                plannerView: document.getElementById('plannerView'),
+                calendarGrid: document.getElementById('calendarGrid'),
+                monthSelect: document.getElementById('monthSelect'),
+                yearSelect: document.getElementById('yearSelect'),
+                taskModal: document.getElementById('taskModal'),
+                modalOverlay: document.getElementById('modalOverlay'),
+                modalDateLabel: document.getElementById('modalDateLabel'),
+                taskInput: document.getElementById('taskInput'),
+                activeTaskList: document.getElementById('activeTaskList'),
+                finishedTaskList: document.getElementById('finishedTaskList'),
+                finishedSection: document.getElementById('finishedTasksSection'),
+                modalTimeSlider: document.getElementById('modalTimeSlider'),
+                modalTimeValue: document.getElementById('modalTimeValue'),
+                modalAnalyzeBtn: document.getElementById('modalAnalyzeBtn'),
+                modalResultArea: document.getElementById('modalResultArea'),
+                modalResAction: document.getElementById('modalResAction'),
+                modalResReason: document.getElementById('modalResReason'),
+                addView: document.getElementById('modalAddView'),
+                analyzeView: document.getElementById('modalAnalyzeView'),
+                addTab: document.getElementById('modalAddTab'),
+                analyzeTab: document.getElementById('modalAnalyzeTab')
+            };
+
+            // Initialize filters
+            function populateDateFilters() {
+                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                elements.monthSelect.innerHTML = months.map((m, i) => `<option value="${i}">${m}</option>`).join('');
+
+                const currentYear = new Date().getFullYear();
+                const years = [];
+                for (let y = currentYear - 5; y <= currentYear + 10; y++) {
+                    years.push(y);
+                }
+                elements.yearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+            }
+            populateDateFilters();
+
+            elements.monthSelect.onchange = () => {
+                currentDate.setMonth(parseInt(elements.monthSelect.value));
+                renderCalendar();
+            };
+            elements.yearSelect.onchange = () => {
+                currentDate.setFullYear(parseInt(elements.yearSelect.value));
+                renderCalendar();
+            };
+
+            // Fetch tasks on load
+            async function fetchTasks() {
+                try {
+                    const res = await fetch('/tasks');
+                    if (res.ok) {
+                        scheduledTasks = await res.json();
+                        renderCalendar();
+                    }
+                } catch (e) {
+                    console.error("Fetch tasks failed:", e);
+                }
+            }
+            fetchTasks();
+
+            // Calendar
+            window.renderCalendar = function () {
+                elements.calendarGrid.innerHTML = '';
+                const year = currentDate.getFullYear();
+                const month = currentDate.getMonth();
+
+                // Sync selectors
+                elements.monthSelect.value = month;
+                elements.yearSelect.value = year;
+
+                ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
+                    const div = document.createElement('div');
+                    div.className = 'calendar-day-label';
+                    div.innerText = day;
+                    elements.calendarGrid.appendChild(div);
+                });
+
+                const firstDay = new Date(year, month, 1).getDay();
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                const prevMonthDays = new Date(year, month, 0).getDate();
+
+                // Prev Month
+                for (let i = firstDay - 1; i >= 0; i--) {
+                    createDayElement(prevMonthDays - i, true, new Date(year, month - 1, prevMonthDays - i));
+                }
+
+                // Current Month
+                for (let i = 1; i <= daysInMonth; i++) {
+                    createDayElement(i, false, new Date(year, month, i));
+                }
+
+                // Next Month to complete 42 slots
+                const remaining = 42 - (elements.calendarGrid.children.length - 7);
+                for (let i = 1; i <= remaining; i++) {
+                    createDayElement(i, true, new Date(year, month + 1, i));
+                }
+
+                lucide.createIcons();
+            };
+
+            function createDayElement(day, isOther, dateObj) {
+                const div = document.createElement('div');
+                div.className = 'calendar-day' + (isOther ? ' other-month' : '');
+
+                const dateKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+
+                if (scheduledTasks[dateKey] && scheduledTasks[dateKey].length > 0) {
+                    div.classList.add('has-tasks');
+                }
+
+                if (dateObj.toDateString() === new Date().toDateString()) {
+                    div.classList.add('today');
+                }
+
+                div.innerText = day;
+                div.onclick = () => window.openTaskModal(dateKey);
+                elements.calendarGrid.appendChild(div);
+            }
+
+            window.prevMonth = () => { currentDate.setMonth(currentDate.getMonth() - 1); renderCalendar(); };
+            window.nextMonth = () => { currentDate.setMonth(currentDate.getMonth() + 1); renderCalendar(); };
+
+            // Modal
+            window.switchModalTab = function (tab) {
+                if (tab === 'add') {
+                    elements.addView.style.display = 'block';
+                    elements.analyzeView.style.display = 'none';
+                    elements.addTab.classList.add('active');
+                    elements.analyzeTab.classList.remove('active');
+                } else {
+                    elements.addView.style.display = 'none';
+                    elements.addView.style.display = 'none';
+                    elements.analyzeView.style.display = 'block';
+                    elements.addTab.classList.remove('active');
+                    elements.analyzeTab.classList.add('active');
+                    elements.modalResultArea.style.display = 'none';
+                }
+            };
+
+            window.openTaskModal = function (dateKey) {
+                selectedDate = dateKey;
+                const [y, m, d] = dateKey.split('-').map(Number);
+                const dateObj = new Date(y, m - 1, d);
+
+                elements.modalDateLabel.innerText = dateObj.toLocaleDateString('en-US', { dateStyle: 'full' });
+                elements.taskModal.classList.add('show');
+                elements.modalOverlay.style.display = 'block';
+                elements.taskInput.value = '';
+                switchModalTab('add');
+                renderDayTasks();
+            };
+
+            window.closeModal = () => {
+                elements.taskModal.classList.remove('show');
+                elements.modalOverlay.style.display = 'none';
+            };
+
+            window.scheduleTask = async function () {
+                const task = elements.taskInput.value.trim();
+                if (!task) return;
+
+                const btn = document.querySelector('#modalAddView .primary-btn');
+                const originalText = btn.innerText;
+                btn.innerText = 'Adding...';
+                btn.disabled = true;
+
+                try {
+                    const res = await fetch('/tasks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ date: selectedDate, task: task })
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (!scheduledTasks[selectedDate]) scheduledTasks[selectedDate] = [];
+                        scheduledTasks[selectedDate].push(data.task);
+                        elements.taskInput.value = '';
+                        renderDayTasks();
+                        renderCalendar();
+                    } else {
+                        const err = await res.json();
+                        alert("Error: " + (err.error || "Failed to add task"));
+                    }
+                } catch (e) {
+                    console.error("Schedule failed:", e);
+                    alert("Network error. Is the server running?");
+                } finally {
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                    elements.taskInput.focus();
+                }
+            };
+
+            window.toggleTaskCompletion = async function (taskId) {
+                try {
+                    const res = await fetch('/tasks/toggle', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ date: selectedDate, taskId: taskId })
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        const tasks = scheduledTasks[selectedDate];
+                        const task = tasks.find(t => t.id === taskId);
+                        if (task) {
+                            task.completed = data.completed;
+                            renderDayTasks();
+                        }
+                    }
+                } catch (e) {
+                    console.error("Toggle failed:", e);
+                }
+            };
+
+            window.analyzeDayTasks = async function () {
+                const allTasks = scheduledTasks[selectedDate] || [];
+                const tasks = allTasks.filter(t => !t.completed); // Only analyze incomplete tasks
+
+                if (tasks.length === 0) {
+                    if (allTasks.length > 0) alert("All tasks are already completed!");
+                    else alert("Add some tasks first!");
+                    return;
+                }
+
+                elements.modalAnalyzeBtn.innerText = 'Analyzing...';
+                elements.modalAnalyzeBtn.disabled = true;
+
+                const goals = tasks.map(t => ({ name: t.text, estimated_time: 30 }));
+
+                try {
+                    const res = await fetch('/calculate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ goals: goals, time: elements.modalTimeSlider.value })
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        elements.modalResAction.innerText = data.action;
+                        elements.modalResReason.innerText = data.reason;
+                        elements.modalResultArea.style.display = 'block';
+                    }
+                } catch (e) {
+                    console.error("Analysis failed:", e);
+                } finally {
+                    elements.modalAnalyzeBtn.innerText = 'Get Next Step';
+                    elements.modalAnalyzeBtn.disabled = false;
+                }
+            };
+
+            function renderDayTasks() {
+                elements.activeTaskList.innerHTML = '';
+                elements.finishedTaskList.innerHTML = '';
+
+                const tasks = scheduledTasks[selectedDate] || [];
+                let hasFinished = false;
+
+                tasks.forEach(t => {
+                    const div = document.createElement('div');
+                    const completed = t.completed;
+                    div.className = `scheduled-task-item ${completed ? 'completed' : ''}`;
+
+                    div.innerHTML = `
+                        <div class="task-checkbox ${completed ? 'checked' : ''}" onclick="event.stopPropagation(); window.toggleTaskCompletion(${t.id})">
+                            <i data-lucide="check"></i>
+                        </div>
+                        <span class="task-text">${t.text}</span>
+                    `;
+
+                    if (completed) {
+                        elements.finishedTaskList.appendChild(div);
+                        hasFinished = true;
+                    } else {
+                        elements.activeTaskList.appendChild(div);
+                    }
+                });
+
+                elements.finishedSection.style.display = hasFinished ? 'block' : 'none';
+                lucide.createIcons();
+            }
+
+            // Slider listener
+            elements.modalTimeSlider.oninput = () => elements.modalTimeValue.innerText = elements.modalTimeSlider.value;
+        });
+    </script>
+</body>
+
+</html>
